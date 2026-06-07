@@ -45,9 +45,6 @@ export class Actual extends ServiceMap.Service<Actual>()("Actual", {
     ).pipe(Config.withDefault(false))
 
     if (allowSelfSignedCert) {
-      // NODE_TLS_REJECT_UNAUTHORIZED=0 is confirmed to work for Node 24's built-in
-      // globalThis.fetch (which is what @actual-app/api's bundle uses via
-      // `const fetch$1 = globalThis.fetch` — its postBinary sync calls go through this).
       process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"
       yield* Effect.logWarning(
         "TLS certificate verification is disabled (ACTUAL_ALLOW_SELF_SIGNED_CERT=true). Use only with trusted servers.",
