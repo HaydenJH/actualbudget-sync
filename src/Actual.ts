@@ -34,11 +34,25 @@ export class Actual extends ServiceMap.Service<Actual>()("Actual", {
       Config.withDefault("data"),
     )
     const server = yield* Config.url("ACTUAL_SERVER")
+    yield* Effect.logInfo(`Connecting to Actual server: ${server.toString()}`)
     const password = yield* Config.redacted("ACTUAL_PASSWORD")
     const encryptionPassword = yield* Config.redacted(
       "ACTUAL_ENCRYPTION_PASSWORD",
     ).pipe(Config.withDefault(undefined))
     const syncId = yield* Config.string("ACTUAL_SYNC_ID")
+    const allowSelfSignedCert = yield* Config.boolean(
+      "ACTUAL_ALLOW_SELF_SIGNED_CERT",
+    ).pipe(Config.withDefault(false))
+
+    if (allowSelfSignedCert) {
+      // NODE_TLS_REJECT_UNAUTHORIZED=0 is confirmed to work for Node 24's built-in
+      // globalThis.fetch (which is what @actual-app/api's bundle uses via
+      // `const fetch$1 = globalThis.fetch` — its postBinary sync calls go through this).
+      process.env["NODE_TLS_REJECT_UNAUTHORIZED"] = "0"
+      yield* Effect.logWarning(
+        "TLS certificate verification is disabled (ACTUAL_ALLOW_SELF_SIGNED_CERT=true). Use only with trusted servers.",
+      )
+    }
 
     if (!server.pathname.endsWith("/")) {
       server.pathname += "/"
@@ -159,7 +173,27 @@ export class Actual extends ServiceMap.Service<Actual>()("Actual", {
     return { use, query, findImported } as const
   }),
 }) {
-  static layer = Layer.effect(this)(this.make).pipe(
-    Layer.provide([NodeHttpClient.layerUndici, Npm.layer]),
-  )
+  static layer = (() => {
+    // Match the same truthy values that Effect's Config.boolean accepts
+    const val = (process.env["ACTUAL_ALLOW_SELF_SIGNED_CERT"] ?? "")
+      .toLowerCase()
+      .trim()
+    const allowSelfSigned =
+      val === "true" || val === "1" || val === "yes" || val === "on"
+
+    // For the Effect HttpClient (used for the /info version check):
+    // - Normal: undici (fast, modern, same version as @effect/platform-node uses)
+    // - Self-signed: node:https with rejectUnauthorized:false (avoids undici version
+    //   mismatch — top-level undici 8.x vs platform-node's internal undici 7.x)
+    const httpClientLayer = allowSelfSigned
+      ? Layer.provide(
+          NodeHttpClient.layerNodeHttpNoAgent,
+          NodeHttpClient.layerAgentOptions({ rejectUnauthorized: false }),
+        )
+      : NodeHttpClient.layerUndici
+
+    return Layer.effect(Actual)(Actual.make).pipe(
+      Layer.provide([httpClientLayer, Npm.layer]),
+    )
+  })()
 }

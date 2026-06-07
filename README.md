@@ -166,6 +166,10 @@ ACTUAL_SERVER=https://actual.example.com
 ACTUAL_SYNC_ID=xxx
 ACTUAL_PASSWORD=xxx
 
+# Set to true if your Actual server uses a self-signed TLS certificate (e.g. on a local network).
+# WARNING: This disables TLS certificate verification. Only use with servers you trust.
+ACTUAL_ALLOW_SELF_SIGNED_CERT=true
+
 # For the Akahu bank, you will also need to set these:
 AKAHU_APP_TOKEN=xxx
 AKAHU_USER_TOKEN=xxx
